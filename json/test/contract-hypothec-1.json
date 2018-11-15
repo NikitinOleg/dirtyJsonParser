@@ -1,0 +1,2840 @@
+{
+	type: 'documentTemplate',
+	derivation: 'document',
+	document: {code:'contract',name:'Договор страхования',field:'type'},
+	selector: {code:'hypothec',name:'ПреИмущество для Ипотеки',type:{code:'insuranceProduct',name:'Страховой продукт'},properties:{code:'028'}},
+	version: 1,
+	journals:{
+		main: 'hypothecList'
+	},
+	reports:{
+		defaultType: 'pdf',
+		list:[
+			{code:'HYPOTHEC_POLICY', name:'Печать формы полиса', desc:'Вывод на печать формы полиса'},
+			{code:'HYPOTHEC_POLICY_BLANK', name:'Печать формы полиса для бланка', desc:'Вывод на печать формы полиса для бланка'},
+			{code:'HYPOTHEC_LIST', name:'Печать листа согласования', desc:'Вывод на печать листа согласования'},
+			{code: "VTBIns_hypothec_rules.pdf", name: "Печать условий страхования", desc: "Вывод на печать условий страхования", type: "file"},
+			{code:'HYPOTHEC_PAYMENT',name:'Печать cчета на оплату',desc:'Вывод на печать формы cчета на оплату'}
+		],
+		logic:[]
+	},
+	plugins:['hypothec','blacklist'],
+	blacklist:{
+		policyNumber:['contractData.number'],
+		totals:{limit:'',premium:'logic.results.totalSP'},
+		subjects:[
+			{name:'Страхователь', namespace:'policyHolder', passport:true, addresses:['property.immovable.address','policyHolder'], phones:['phone','phoneHome'], ts:false},
+			{name:'Застрахованный 1', namespace:'lifeInsurance.insuredPerson1', passport:true, addresses:false, phones:false, ts:false},
+			{name:'Застрахованный 2', namespace:'lifeInsurance.insuredPerson2', passport:true, addresses:false, phones:false, ts:false},
+			{name:'Выгодоприобретатель 1', namespace:'lifeInsurance.beneficiary1', passport:true, addresses:false, phones:false, ts:false},
+			{name:'Выгодоприобретатель 2', namespace:'lifeInsurance.beneficiary2', passport:true, addresses:false, phones:false, ts:false}
+		]
+	},
+	actions:[
+		{
+			type:'logicPanel',
+			code:'logic',
+			title: 'Стоимость страховки',
+			preview: false,
+			previewLabel: 'Подробности расчета',
+			totalCode:'calcPreview',
+			cls: 'vtb',
+			items:[
+				{name:'Итого (в части имущества)', path : 'logic.results.propTotalSP', renderer:'money',join:['',' руб.']},
+				{name:'Итого (страхование жизни)', path : 'logic.results.lifeTotalSP', renderer:'money',join:['',' руб.']},
+				{name:'Итого (титульное страхование)', path : 'logic.results.titleSP', renderer:'money',join:['',' руб.']},
+				{name:' ',path:'logic.results.totalSP',renderer:'money',cls:'total',join:['',' руб.']}
+			],
+			warnings: 'logic.warnings'
+		},{
+			type:'buttonGroup',
+			code:'main',
+			title: 'Действия с документом',
+			items:[
+				{code:'save',name:'Сохранить'},
+				{code:'print',name:'Печать'},
+				{code:'close',name:'Закрыть'},
+				{code:'product',name:'О продукте'},
+				{code:'send',name:'Отправить письмо'},
+				{code:'sendPartner',name:'Отправить письмо партнеру'}
+			]
+		},{
+			type:'buttonGroup',
+			code:'status',
+			title: 'Смена статуса документа',
+			items:[]
+		},{
+			type:'properties',
+			code:'properties',
+			title: 'Свойства документа',
+			items:[
+				{name:'Статус',path:'properties.status.name'},
+				{name:'Автор',path:'properties.author.name'},
+				{name:'Подразделение',path:'properties.department.name'},
+				{name:'Дата создания',path:'properties.createDate',renderer:'dateTimeShade'},
+				{name:'Дата изменения',path:'properties.changeDate',renderer:'dateTimeShade'},
+				{name:'IP Адрес',path:'properties.REMOTE_ADDR'}
+			]
+		}
+	],
+	totals:[],
+	actionsLogic:[
+		{
+			type:'stop',
+			conditions:[
+				{field:'input.user.role',check:{operation:'in',value:['manager']}},
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['draft']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.enabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.send'}
+			]
+		},
+		{
+			conditions:[
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['accepted']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.allOn',value:'no'},
+				{condition:false,type:'add',field:'output.allOn',value:'yes'}
+			]
+		},
+		{
+			conditions:[
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['accepted']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.enabled',value:'main.save'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.send'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.print'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.close'}
+			]
+		},{
+			conditions:[
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['annul']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.disabled',value:'main.save'},
+				{condition:true,type:'add',field:'output.disabled',value:'main.print'}
+			]
+		},{
+			conditions:[
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['draft']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.enabled',value:'main.product'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.print'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.send'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.close'}
+			]
+		},{
+			type:'stop',
+			conditions:[
+					{field:'input.user.role',check:{operation:'in',value:['underwriter']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.disabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.disabled',value:'main.send'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.product'},
+				{condition:true,type:'add',field:'output.disabled',value:'main.save'}
+			]
+		},{
+			type:'stop',
+			conditions:[
+					{field:'input.user.role',check:{operation:'in',value:['readOnly']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.disabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.disabled',value:'main.send'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.product'},
+				{condition:true,type:'add',field:'output.disabled',value:'main.save'}
+			]
+		},{
+			type:'stop',
+			conditions:[
+				{field:'input.user.role',check:{operation:'in',value:['curator']}},
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['accepted']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.enabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.send'}
+			]
+		},{
+			conditions:[
+				{field:'input.user.role',check:{operation:'in',value:['ADM','SIP']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.enabled',value:'main.sendPartner'},
+				{condition:false,type:'add',field:'output.disabled',value:'main.sendPartner'},
+				{condition:true,type:'add',field:'output.enabled',value:'main.send'},
+				{condition:false,type:'add',field:'output.disabled',value:'main.send'}
+			]
+		},{
+			conditions:[
+				{field:'input.user.role',check:{operation:'in',value:['AGENT','agentTM']}},
+				{field:'input.document.properties.status.code',check:{operation:'in',value:['accepted']}}
+			],
+			influence:[
+				{condition:true,type:'add',field:'output.disabled',value:'main.save'}
+			]
+		}
+	],
+	formLocks:{
+		byStatus:[{code:'accepted',type:'section',group:true,lock:'all'},{code:'annul',type:'section',group:true,lock:'all'}]/*,
+		byMixed:[
+			{status:['accepted'],role:['AGENT','agentTM'],type:'section',group:true,lock:'all'},
+			{status:['accepted'],role:['ADM','SIP','curator'],type:'section',group:true,except:['contractDates','policyHolder','insuredPerson','conditions','address','addressInsured'],lock:'all'},
+			{status:['accepted'],role:['ADM','SIP','curator'],type:'sectionColumn',group:'conditions',column:1,lock:'all'},
+			{status:['accepted'],role:['callcenter'],type:'section',group:true,except:['contractDates','policyHolder','insuredPerson'],lock:'all'},
+			{status:['accepted'],role:['ADM','SIP','curator'],type:'fields',group:['contractDates'],fields:['number','issueDate','multiOn','length','endDate']},
+			{status:['accepted'],role:['callcenter'],type:'fields',group:['contractDates'],fields:['number','issueDate','multiOn','length','beginDate','endDate']}
+		]*/
+	},
+	statusPlan:{
+		initial: 'draft',
+		initialLogic:[],
+		list:[
+			{code:'draft',name:'Заявление'},
+			{code:'accepted',name:'Подтвержденный',label:'Перевести в действующий',roles:['AGENT','agentTM','manager','curator','callcenter','webPartner','OperationsOfficer','ADM','SIP']},
+			{code:'annul',name:'Аннулирован'}
+		],
+		edges:[
+			{
+				code:['draft'],
+				move:[
+					{code:'accepted'}
+				]
+			}
+		]
+	},
+	metaform:{
+		viewType: 'tabs',
+		statusChange: 'manual',
+		statusRegister: 'contractStatus',
+		hideBlocks: true,
+		blocks:[
+			{code:'main',title: 'Основные данные полиса'}
+		],
+		chunks:[],
+		subject:'subject',
+		views:{
+			list:[
+				{code:'lifeIns1',name:'Страхование жизни, первый застрахованный и выгодоприобретатель.'},
+				{code:'lifeIns2',name:'Страхование жизни, второй застрахованный и выгодоприобретатель.'},
+				{code:'titul',name:'Страхование титула'}
+			],
+			hates:[],
+			logic:[
+				{
+					conditions:[
+						{field:'input.lifeInsurance.insuredPerson1.exists',check:{operation:'=',value:true}}
+					],
+					influence:[
+						{condition:true,type:'add',field:'output.views',value:'lifeIns1'},
+						{condition:false,type:'remove',field:'output.views',value:'lifeIns1'}
+					]
+				},{
+					conditions:[
+						{field:'input.lifeInsurance.insuredPerson2.exists',check:{operation:'=',value:true}}
+					],
+					influence:[
+						{condition:true,type:'add',field:'output.views',value:'lifeIns2'},
+						{condition:false,type:'remove',field:'output.views',value:'lifeIns2'}
+					]
+				},{
+					conditions:[
+						{field:'input.titulInsurance.exists',check:{operation:'=',value:true}}
+					],
+					influence:[
+						{condition:true,type:'add',field:'output.views',value:'titul'},
+						{condition:false,type:'remove',field:'output.views',value:'titul'}
+					]
+				}
+			]
+		},
+		presets:[
+			{namespace:'contractData',name:'agentInfo.docNumber',config:'currentUser.docNumber'},
+			{namespace:'contractData',name:'agentInfo.docDate',config:'currentUser.docDate'},
+			{namespace:'contractData',name:'bank.bankROO',config:'department.bankROO'},
+			{namespace:'contractData',name:'bank.bankTP',config:'department.bankTP'},
+			{namespace:'contractData',name:'bank.bankTPcode',config:'department.bankTPcode'},
+			{namespace:'contractData',name:'inventoryNumber',config:'misc.inventoryNumber'},
+			{namespace:'contractData',name:'issueDate',config:'misc.issueDate'},
+			{namespace:'contractData',name:'beginDate',config:'misc.beginDate'},
+			{namespace:'contractData',name:'endDate',config:'misc.endDate'},
+			{namespace:'contractData',name:'tmCode',config:'misc.tmCode'}
+		],
+		postsets:[],
+		onchange:[],
+		items:[
+			{
+				xtype: 'Resolute.ui.form.section',
+				group: 'contractDates',
+				columns: [
+					{width:0.50,labelAlign:'right',labelWidth: 170},
+					{width:0.50,labelAlign:'right',labelWidth: 120},
+					{width:0.50,labelAlign:'right',labelWidth: 170},
+					{width:0.50,labelAlign:'right',labelWidth: 120}
+				],
+				labelWidth: 90,
+				place:'main',
+				allowBlank:false,
+				namespace: 'contractData',
+				fields:[
+					{
+						xtype: 'Resolute.ui.form.codeField',
+						sequence:{
+							code: 'hypothec',
+							type: 'policy'
+						},
+						properties:{
+							auto: true,
+							sequenceAdd:[],
+							maskAdd:[{code:'regionCode', cfg:'department.region.codeKladr', defaultValue: '77'}],
+							leading: 7,
+							mask: 'A028{regionCode}-{value}'
+						},
+						fieldLabel:'Номер полиса',
+						name: 'number',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Дата выдачи полиса',
+						name: 'issueDate',
+						showTime: false,
+						//disabled: true,
+						width: 150,
+						//value: "today",
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Код привлечения ТМ',
+						vtype:'digitsCharsRUSlashENG',
+						allowBlank:true,
+						disabled:true,
+						name: 'tmCode',
+						anchor:'100%',
+						//width: 150,
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel:'Дата начала',
+						name: 'beginDate',
+						allowBlank:false,
+						showTime:false,
+						disabled:true,
+						width: 150,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel:'Дата окончания',
+						name: 'endDate',
+						showTime:false,
+						forceDayEnd:true,
+						width: 150,
+						column: 1,
+						disabled:true
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Рассрочка',
+						name: 'paymentType',
+						allowBlank: false,
+						column: 0,
+						data: 'paymentType',
+						value: 'instantly',
+						anchor: '100%'
+					},{
+						xtype: 'textfield',
+						allowBlank: true,
+						fieldLabel:'Код учета',
+						name: 'inventoryNumber',
+						disabled: true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Номер доверенности',
+						name: 'agentInfo.docNumber',
+						allowBlank: false,
+						column: 0,
+						width: 150
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel:'Дата доверенности',
+						name: 'agentInfo.docDate',
+						allowBlank: false,
+						showTime:false,
+						width: 150,
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Тип полиса',
+						name: 'policyType',
+						allowBlank: false,
+						column: 0,
+						data: 'policyType',
+						value: 'primary',
+						anchor: '100%',
+						influence: [
+							{value: "prolongation", type:'show', namespace: 'contractData', field:'prevPolicy.issueDate'},
+							{value: "prolongation", type:'show', namespace: 'contractData', field:'prevPolicy.number'},
+							{value: "primary", type:'hide', namespace: 'contractData', field:'prevPolicy.issueDate'},
+							{value: "primary", type:'hide', namespace: 'contractData', field:'prevPolicy.number'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel:'Дата выдачи пред. полиса',
+						name: 'prevPolicy.issueDate',
+						showTime: false,
+						allowBlank: false,
+						width: 150,
+						column: 0,
+						hidden: true
+					},{
+						xtype: 'textfield',
+						fieldLabel:'Номер пред. полиса',
+						name: 'prevPolicy.number',
+						allowBlank: false,
+						column: 0,
+						width: 150,
+						hidden: true
+					},{
+						xtype: 'compositefield',
+						// fieldLabel: 'Специальные тарифные программы',
+						fieldLabel: 'Спец. программы',
+						name: 'specProgs',
+						column: 1,
+						items: [
+							{
+								xtype: 'checkbox',
+								fieldLabel: '',
+								boxLabel : '«С ипотекой легко»',
+								name: 'hypothecLight',
+								anchor:'100%',
+								disabled: true,
+								column: 0
+							},{
+								xtype: 'checkbox',
+								fieldLabel: '',
+								boxLabel : '«Вся квартира»',
+								name: 'allFlat',
+								anchor:'100%',
+								disabled: true,
+								column: 0
+							}
+						]
+					},{
+						xtype: 'checkbox',
+						fieldLabel: '',
+						boxLabel : '«Покупай больше, плати меньше»',
+						name: 'specProgs.buyMore',
+						anchor:'100%',
+						disabled: true,
+						column: 1
+					},{
+						//Отступ для того, чтобы левая колонка не была ниже правой.
+						xtype: 'displayfield',
+						column: 1,
+						cls:'x-form-item-label resolute-form-field-obligatory resolute-center',
+						value:'',
+						anchor:'100%',
+					},{
+						xtype: 'displayfield',
+						column: 1,
+						cls:'x-form-item-label resolute-form-field-obligatory resolute-center',
+						value:'Данные сотрудника банка - кредитный менеджер/менеджер по сопровождению',
+						anchor:'100%',
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'bankEmployee.lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'bankEmployee.firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'bankEmployee.middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Табельный номер',
+						name: 'bankEmployee.employeeID',
+						vtype:'digits',
+						allowBlank: false,
+						column: 1,
+						width: 150
+					},{
+						xtype: 'textfield',
+						allowBlank: false,
+						fieldLabel:'Наименование РОО банка',
+						name: 'bank.bankROO',
+						anchor:'100%',
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.journalSelect',
+						fieldLabel: 'Данные банка',
+						journalCode: 'hypothecBanksList',
+						name: 'bank.bankObj',
+						template: '{bankTP}',
+						anchor:'100%',
+						inWindow: true,
+						column:2
+					},{
+						xtype: 'textfield',
+						allowBlank: false,
+						fieldLabel:'Наименование ТП банка',
+						name: 'bank.bankTP',
+						anchor:'100%',
+						disabled:true,
+						column: 2
+					},{
+						xtype: 'textfield',
+						allowBlank: false,
+						fieldLabel:'Код ТП банка',
+						name: 'bank.bankTPcode',
+						anchor:'100%',
+						disabled:true,
+						column: 2
+					},{
+						xtype: 'displayfield',
+						column: 1,
+						cls:'x-form-item-label',
+						value:'Если сотрудник банка не участвовал в продаже, необходимо указать «НЕТ» в полях ФИО и «111111» в Таб номере',
+						anchor:'100%',
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Номер кредитного договора',
+						name: 'credPolicyNumber',
+						allowBlank:false,
+						anchor:'100%',
+						column: 3
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: '1. Страхование имущества и гражданской ответственности',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns: [
+					{width:0.85, labelAlign:'right', labelWidth: 250},
+					{width:0.15, labelAlign:'right',labelWidth: 1},
+					
+					{width: 1, labelAlign: 'right', labelWidth: 250},
+					//{width:0.23, labelAlign:'right',labelWidth: 120},
+					
+					{width:0.77, labelAlign:'right',labelWidth: 250},
+					{width:0.23, labelAlign:'right',labelWidth: 120},
+
+					{width:0.65,labelAlign:'right',labelWidth: 420},
+					{width:0.35,labelAlign:'right',labelWidth: 1},
+
+					{width: 1, labelAlign: 'right', labelWidth: 420},
+					{width: 1, labelAlign: 'right', labelWidth: 420}
+				],
+				place:'main',
+				namespace: 'property',
+				code: "property",
+				fields:[
+					{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Недвижимое имущество',
+						name: 'immovable.type',
+						data: 'immovableType',
+						allowBlank: false,
+						anchor: '100%',
+						value: "flat",
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: '',
+						vtype: 'charsRUSpace',
+						allowBlank: false,
+						disabled: true,
+						name: 'immovable.typeText',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Находится в залоге (ипотеке)',
+						name: 'immovable.hypothec',
+						data: 'yesNoBool',
+						allowBlank: false,
+						width: 332,
+						value: true,
+						// anchor:'100%',
+						column: 2
+					},{
+						xtype: 'compositefield',
+						fieldLabel: 'Залогодержатель',
+						name: 'immovable.mortgagee',
+						allowBlank: false,
+						column: 2,
+						value: {
+							type: {code: "vtb", name: "ВТБ 24"},
+							name: "ВТБ 24"
+						},
+						items: [
+							{
+								xtype: 'Resolute.ui.form.list',
+								// fieldLabel: 'Залогодержатель',
+								name: 'type',
+								data: 'mortgageeType',
+								allowBlank: false,
+								width: 332
+								// anchor: '100%'
+							},{
+								xtype: 'textfield',
+								fieldLabel: '',
+								//vtype: 'charsRUSpace',
+								allowBlank: false,
+								disabled: true,
+								name: 'name',
+								anchor: '100%'
+							}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Стоимость недвижимости',
+						name: 'immovable.value',
+						allowDecimals: false,
+						allowBlank: false,
+						width: 167,
+						// noCurrency: true,
+						zeroClear: true,
+						//minValue: 1,
+						column: 2
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.anotherInsPolicy.exsists',
+						anchor: '100%',
+						boxLabel : 'Недвижимое имущество застраховано по другому договору страхования',
+						column: 2,
+						influence:[
+							{value: false, type:'disable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.number'},
+							{value: false, type:'disable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.date'},
+							{value: false, type:'disable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.insurer'},
+							{value: false, type:'disable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.ss'},
+							{value: true, type:'enable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.number'},
+							{value: true, type:'enable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.date'},
+							{value: true, type:'enable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.insurer'},
+							{value: true, type:'enable', check: {operation: "="}, namespace: 'property', field:'immovable.anotherInsPolicy.ss'},
+							{value: false, type:'set', check: {operation: "="}, namespace: 'property', field: 'immovable.anotherInsPolicy.number'},
+							{value: false, type:'set', check: {operation: "="}, namespace: 'property', field: 'immovable.anotherInsPolicy.date'},
+							{value: false, type:'set', check: {operation: "="}, namespace: 'property', field: 'immovable.anotherInsPolicy.insurer'},
+							{value: false, type:'set', check: {operation: "="}, namespace: 'property', field: 'immovable.anotherInsPolicy.ss'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: '№ договора ипотечного страхования',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						name: 'immovable.anotherInsPolicy.number',
+						width: 332,
+						disabled: true,
+						column: 3
+					},{
+						xtype: 'compositefield',
+						fieldLabel: 'Страховщик',
+						name: 'immovable.anotherInsPolicy.insurer',
+						allowBlank: false,
+						column: 3,
+						disabled: true,
+						items: [
+							{
+								xtype: 'Resolute.ui.form.list',
+								// fieldLabel: 'Залогодержатель',
+								name: 'type',
+								data: 'insurerType',
+								allowBlank: false,
+								width: 332
+								// anchor: '100%'
+							},{
+								xtype: 'textfield',
+								fieldLabel: '',
+								//vtype: 'charsRUSpace',
+								allowBlank: false,
+								disabled: true,
+								name: 'name',
+								anchor: '100%'
+							}
+						]
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Дата договора',
+						name: 'immovable.anotherInsPolicy.date',
+						allowBlank: false,
+						showTime: false,
+						//maxValue: "сегодня",
+						width: 100,
+						disabled: true,
+						column: 4
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая сумма',
+						name: 'immovable.anotherInsPolicy.ss',
+						allowDecimals: false,
+						zeroClear: true,
+						allowBlank: false,
+						width: 100,
+						disabled: true,
+						column: 4
+						//minValue: 1
+					},{
+						fieldLabel: '<b>Страхование имущества</b>',
+						xtype: 'checkbox',
+						name: 'exists',
+						width: 150,
+						boxLabel : ' ',
+						// value: true, не работает...
+						// checked: true, а так галочка ставится, но view не отрабатывает
+						column: 3,
+						influence:[
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.buildYear'},
+							// {value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.tariff'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.area'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.fireproof'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.wooden'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.unsafe'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.builded'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.builded'},
+							// {value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.rent'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.serviceable'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.serviceable'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.unlegalizedReplanning'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.unlegalizedReplanning'},
+							//{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.repair'},
+							//{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.repair'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.notToLive'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.notToLive'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.damaged'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.kUnder.damaged'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.openFire'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'immovable.heatingSystem'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'terrorHover'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'construct'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'inside'},
+							{value: true, check: {operation: "!="}, type:'disable', namespace: 'property', field:'movable'},
+							{value: true, check: {operation: "!="}, type:'set', code: "", namespace: 'property', field:'immovable.buildYear'},
+							{value: true, check: {operation: "!="}, type:'set', code: "", namespace: 'property', field:'immovable.area'},
+							// {value: true, check: {operation: "!="}, type:'set', code: "", namespace: 'property', field:'immovable.tariff'},
+							{value: true, check: {operation: "!="}, type:'set', code: {toFullSs: false, ss: 0, sp:0}, namespace: 'property', field:'construct'},
+							{value: true, check: {operation: "!="}, type:'set', code: {ssCombo: {code: 0, name: "Нет"}, ss: 0, sp:0}, namespace: 'property', field:'inside'},
+							{value: true, check: {operation: "!="}, type:'set', code: {ssCombo: {code: 0, name: "Нет"}, ss: 0, sp:0}, namespace: 'property', field:'movable'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.buildYear'},
+							// {value: true, type:'enable', namespace: 'property', field:'immovable.tariff'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.area'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.fireproof'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.wooden'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.unsafe'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.builded'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.builded'},
+							// {value: true, type:'enable', namespace: 'property', field:'immovable.rent'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.serviceable'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.serviceable'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.unlegalizedReplanning'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.unlegalizedReplanning'},
+							// {value: true, type:'enable', namespace: 'property', field:'immovable.repair'},
+							// {value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.repair'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.notToLive'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.notToLive'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.damaged'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.kUnder.damaged'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.openFire'},
+							{value: true, type:'enable', namespace: 'property', field:'immovable.heatingSystem'},
+							{value: true, type:'enable', namespace: 'property', field:'terrorHover'},
+							{value: true, type:'enable', namespace: 'property', field:'construct'},
+							{value: true, type:'enable', namespace: 'property', field:'inside'},
+							{value: true, type:'enable', namespace: 'property', field:'movable'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Год постройки',
+						name: 'immovable.buildYear',
+						vtype:'digits',
+						maxLength: 4,
+						allowBlank:false,
+						width: 150,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Тариф андеррайтера (%)',
+						allowBlank: false,
+						allowDecimals: true,
+						hidden: true,
+						name: 'immovable.tariff',
+						width: 150,
+						minValue: 2,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Площадь, кв.м.',
+						name: 'immovable.area',
+						allowDecimals: true,
+						allowBlank:false,
+						width: 150,
+						column: 5
+						//minValue: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Несущие стены, каркас из огнестойких или негорючих материалов',
+						name: 'immovable.fireproof',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: true,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Перекрытия содержат элементы из дерева',
+						name: 'immovable.wooden',
+						data: 'yesNoBool',
+						allowBlank: false,
+						width: 150,
+						value: false,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Здание, в котором находится застрахованное имущество, находится в аварийном или ветхом состоянии, предназначено к сносу',
+						name: 'immovable.unsafe',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Недвижимое имущество  является объектом завершенного строительства',
+						name: 'immovable.builded',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: true,
+						column: 5,
+						influence: [
+							{value: false, type:'show', namespace: 'property', field:'immovable.kUnder.builded'},
+							{value: true, type:'hide', namespace: 'property', field:'immovable.kUnder.builded'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.builded',
+						hidden: true,
+						value: 0,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Сдается в аренду',
+						name: 'immovable.rent',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Все системы и коммуникации находятся в работоспособном состоянии',
+						name: 'immovable.serviceable',
+						data: 'yesNoBool',
+						allowBlank: false,
+						width: 150,
+						value: true,
+						column: 5,
+						influence: [
+							{value: false, type:'show', namespace: 'property', field:'immovable.kUnder.serviceable'},
+							{value: true, type:'hide', namespace: 'property', field:'immovable.kUnder.serviceable'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.serviceable',
+						hidden: true,
+						value: 0,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В недвижимом имуществе имеются неузаконенные перепланировки',
+						name: 'immovable.unlegalizedReplanning',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5,
+						influence: [
+							{value: true, type:'show', namespace: 'property', field:'immovable.kUnder.unlegalizedReplanning'},
+							{value: false, type:'hide', namespace: 'property', field:'immovable.kUnder.unlegalizedReplanning'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.unlegalizedReplanning',
+						hidden: true,
+						value: 0,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В недвижимом имуществе будут проводиться ремонтно-отделочные работы',
+						name: 'immovable.repair',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5,
+						influence: [
+							{value: true, type:'hide', check: {operation:'!='}, namespace: 'property', field: 'repairHover'},
+							{value: true, type:'show', check: {operation:'='}, namespace: 'property', field: 'repairHover'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.repair',
+						disabled: true,
+						value: 0,
+						zeroClear: true,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Недвижимое имущество используется для иных целей, чем цели проживания',
+						name: 'immovable.notToLive',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5,
+						influence: [
+							{value: true, type:'show', namespace: 'property', field:'immovable.kUnder.notToLive'},
+							{value: false, type:'hide', namespace: 'property', field:'immovable.kUnder.notToLive'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.notToLive',
+						hidden: true,
+						value: 0,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В недвиж. имуществе за послед. 5 лет были случаи ущерба/повреждения',
+						name: 'immovable.damaged',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5,
+						influence: [
+							{value: true, type:'show', namespace: 'property', field:'immovable.kUnder.damaged'},
+							{value: false, type:'hide', namespace: 'property', field:'immovable.kUnder.damaged'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						allowBlank: false,
+						name: 'immovable.kUnder.damaged',
+						hidden: true,
+						value: 0,
+						width: 150,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В недвижимом имущ-ве имеются источники открытого огня: печи, камины, сауны, бани(как под одной кровлей, так и рядом стоящие)',
+						name: 'immovable.openFire',
+						data: 'yesNoBool',
+						allowBlank:false,
+						width: 150,
+						value: false,
+						column: 5
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.1',
+						anchor:'100%',
+						boxLabel : 'косметический ремонт',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.2',
+						anchor:'100%',
+						boxLabel : 'обои, покраска пола, потолка',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.3',
+						anchor:'100%',
+						boxLabel : 'укладка линолеума/ламината/паркета',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.4',
+						anchor:'100%',
+						boxLabel : 'перенос/создание проёмов в ненесущих стенах(двери,арки)',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.5',
+						anchor:'100%',
+						boxLabel : 'создание перегородок',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.6',
+						anchor:'100%',
+						boxLabel : 'замена труб',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.7',
+						anchor:'100%',
+						boxLabel : 'работы по эл-ву и проводке',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.8',
+						anchor:'100%',
+						boxLabel : 'замена сантехники',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.9',
+						anchor:'100%',
+						boxLabel : 'замена окон, дверей',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.10',
+						anchor:'100%',
+						boxLabel : 'установка натяжных потолков',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.11',
+						anchor:'100%',
+						boxLabel : 'перенос одних функциональных помещений в другие',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.12',
+						anchor:'100%',
+						boxLabel : 'перенос мокрых точек',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.13',
+						anchor:'100%',
+						boxLabel : 'замена инженерных систем (водоснабжения, канализации, электросетей)',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.14',
+						anchor:'100%',
+						boxLabel : 'устройство проёмов в несущих стенах и перекрытиях',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.15',
+						anchor:'100%',
+						boxLabel : 'демонтаж опорных перегородок и/или несущих стен',
+						disabled: true,
+						column: 6
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'immovable.repairWorks.16',
+						anchor:'100%',
+						boxLabel : 'изменение формы оконных и наружных дверных проёмов',
+						disabled: true,
+						column: 6
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Система отопления',
+						name: 'immovable.heatingSystem',
+						data: 'heatingSystem',
+						allowBlank: false,
+						width: 350,
+						value: "central",
+						column: 7
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'terrorHover',
+						boxLabel : 'Покрытие риска \"Террористический акт\"',
+						column: 7
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'repairHover',
+						boxLabel : 'Покрытие рисков, связанных с проведением ремонтно-отделочных работ',
+						hidden: true,
+						column: 7
+					},{
+						xtype: 'compositefield',
+						fieldLabel: '',
+						column: 7,
+						items: [
+							{
+								xtype: 'displayfield',
+								column: 1,
+								cls:'x-form-item-label resolute-form-field-obligatory resolute-center',
+								value:'Страховая сумма, рублей',
+								width: 275
+							},{
+								xtype: 'displayfield',
+								column: 1,
+								cls:'x-form-item-label resolute-form-field-obligatory',
+								value:'Страховая премия, рублей'
+							}
+						]
+					},{
+						xtype: 'compositefield',
+						name: 'construct',
+						fieldLabel: '',
+						column: 7,
+						allowBlank:true,
+						items: [
+							{
+								fieldLabel: 'Конструктивные элементы',
+								xtype: 'checkbox',
+								name: 'toFullSs',
+								width: 150,
+								boxLabel : 'До полной стоимости',
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'ss',
+								value: 0,
+								anchor: '100%',
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'sp',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							}
+						]
+					},{
+						xtype: 'compositefield',
+						name: 'inside',
+						fieldLabel: 'Внутренняя отделка и инженерное оборудование',
+						column: 7,
+						allowBlank:true,
+						items: [
+							{
+								xtype: 'Resolute.ui.form.combobox',
+								fieldLabel: '',
+								name: 'ssCombo',
+								data: 'insideSs',
+								allowBlank:false,
+								width: 150,
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'ss',
+								value: 0,
+								//minValue: 0.01,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'sp',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							}
+						]
+					},{
+						xtype: 'compositefield',
+						name: 'movable',
+						fieldLabel: 'Движимое имущество',
+						column: 7,
+						allowBlank:true,
+						items: [
+							{
+								xtype: 'Resolute.ui.form.combobox',
+								fieldLabel: '',
+								name: 'ssCombo',
+								data: 'movableSs',
+								allowBlank:false,
+								width: 150,
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'ss',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'sp',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							}
+						]
+					},{
+						xtype: 'compositefield',
+						fieldLabel: '',
+						column: 8,
+						items: [
+							{
+								xtype: 'displayfield',
+								column: 1,
+								cls:'x-form-item-label resolute-form-field-obligatory resolute-center',
+								value:'Страховая сумма, рублей',
+								width: 275
+							},{
+								xtype: 'displayfield',
+								column: 1,
+								cls:'x-form-item-label resolute-form-field-obligatory',
+								value:'Страховая премия, рублей'
+							}
+						]
+					},{
+						xtype: 'compositefield',
+						name: 'pl',
+						fieldLabel: 'Гражданская ответственность',
+						column: 8,
+						allowBlank:true,
+						items: [
+							{
+								xtype: 'Resolute.ui.form.combobox',
+								fieldLabel: '',
+								name: 'ssCombo',
+								data: 'plSs',
+								allowBlank:false,
+								width: 150,
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'ss',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							},{
+								xtype: 'Resolute.ui.form.numberField1',
+								allowDecimals: true,
+								name: 'sp',
+								value: 0,
+								disabled: true,
+								anchor: '100%',
+								column: 1
+							}
+						]
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'lifeInsurance',
+				title: '2. Страхование жизни и трудоспособности',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:1,labelAlign:'right',labelWidth: 250},
+					{width:0.57,labelAlign:'right',labelWidth: 250, view: ["lifeIns1"]},
+					{width:0.43,labelAlign:'right',labelWidth: 170, view: ["lifeIns1"]},
+					{width:1,labelAlign:'right',labelWidth: 250},
+					{width:0.57,labelAlign:'right',labelWidth: 250, view: ["lifeIns2"]},
+					{width:0.43,labelAlign:'right',labelWidth: 170, view: ["lifeIns2"]}
+				],
+				group: 'lifeInsurance',
+				place:'main',
+				namespace:'lifeInsurance',
+				fields:[
+					{
+						xtype: 'checkbox',
+						fieldLabel: 'Застрахованный 1',
+						name: 'insuredPerson1.exists',
+						width: 280,
+						//boxLabel : '',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'insuredPerson1.dob1', //Костыль. Эта дата копируется в другое поле, а одинаковых имен быть не должно.
+						width: 280,
+						// disabled: true,
+						//maxValue: '21 год назад',
+						//minValue: '65 лет назад',
+						//value: '21 год назад',
+						column: 1,
+						influence: [
+							{value: false, type:'copy', check:{operation:'true'}, namespace: 'lifeInsurance.insuredPerson1', field:'dob'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Программа страхования',
+						name: 'insuredPerson1.insProgramm',
+						data: 'lifeInsProgramm',
+						allowBlank:false,
+						width: 280,
+						// disabled: true,
+						column: 1
+					},{
+						xtype: 'checkbox',
+						fieldLabel: 'Доход документально подтвержден',
+						name: 'insuredPerson1.incomeVerificated',
+						width: 280,
+						// disabled: true,
+						//boxLabel : '',
+						column: 1/*,
+						influence: [
+							{value: false, type:'filter', check:{operation:'!='}, namespace: 'titulInsurance', field:'kUnder'}
+						]*/
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Официальный доход (в месяц)',
+						allowDecimals: true,
+						name: 'insuredPerson1.officialIncome',
+						value: 0,
+						width: 280,
+						// disabled: true,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Профессиональная деятельность',
+						name: 'insuredPerson1.profession.type',
+						data: 'profession',
+						allowBlank: false,
+						width: 280,
+						// disabled: true,
+						column: 1,
+						influence: [
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson1.profession.name'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.profession.name'},
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson1.profession.kUnder'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.profession.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: '',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson1.profession.name',
+						width: 280,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson1.profession.kUnder',
+						value: 0,
+						width: 280,
+						hidden: true,
+						minValue: 0.01,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Хобби',
+						name: 'insuredPerson1.hobby.type',
+						data: 'hobby',
+						allowBlank:false,
+						width: 280,
+						// disabled: true,
+						column: 1,
+						influence: [
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson1.hobby.name'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.hobby.name'},
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson1.hobby.kUnder'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.hobby.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: '',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson1.hobby.name',
+						width: 280,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson1.hobby.kUnder',
+						value: 0,
+						width: 280,
+						hidden: true,
+						minValue: 0.01,
+						column: 1
+					},{
+						xtype: 'checkbox',
+						fieldLabel: '',
+						name: 'insuredPerson1.disease.exists',
+						width: 200,
+						// disabled: true,
+						boxLabel : 'Страдает заболеваниями:',
+						column: 2,
+						influence: [
+							{value: false, type:'hide', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.disease.name'},
+							{value: true, type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.disease.name'},
+							{value: false, type:'hide', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.disease.kUnder'},
+							{value: true, type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson1.disease.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						// fieldLabel: 'названия',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson1.disease.name',
+						width: 200,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson1.disease.kUnder',
+						value: 0,
+						width: 200,
+						hidden: true,
+						minValue: 0.01,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Вес',
+						allowDecimals: true,
+						name: 'insuredPerson1.weight',
+						allowBlank:false,
+						width: 200,
+						// disabled: true,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Рост',
+						allowDecimals: false,
+						name: 'insuredPerson1.height',
+						allowBlank:false,
+						width: 200,
+						// disabled: true,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Коэффициент массы',
+						disabled: true,
+						allowDecimals: true,
+						name: 'insuredPerson1.kWeight',
+						width: 200,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson1.kUnderWeight',
+						value: 0,
+						hidden: true,
+						width: 200,
+						minValue: 0.01,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Страховая сумма',
+						name: 'insuredPerson1.ssCombo',
+						data: 'lifeInsSs',
+						allowBlank: false,
+						width: 200,
+						// disabled: true,
+						clearFilterOnReset: false,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая сумма, рублей',
+						allowBlank: false,
+						allowDecimals: true,
+						name: 'insuredPerson1.ss',
+						zeroClear: true,
+						value: 0,
+						disabled: true,
+						width: 200,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая премия, рублей',
+						allowDecimals: true,
+						name: 'insuredPerson1.sp',
+						value: 0,
+						width: 200,
+						disabled: true,
+						column: 2
+					}
+					
+					,
+
+					{
+						xtype: 'checkbox',
+						fieldLabel: 'Застрахованный 2',
+						name: 'insuredPerson2.exists',
+						width: 280,
+						//boxLabel : '',
+						column: 3
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'insuredPerson2.dob1', //Костыль. Эта дата копируется в другое поле, а одинаковых имен быть не должно.
+						width: 280,
+						// disabled: true,
+						//maxValue: '21 год назад',
+						//minValue: '65 лет назад',
+						//value: '21 год назад',
+						column: 4,
+						influence: [
+							{value: false, type:'copy', check:{operation:'true'}, namespace: 'lifeInsurance.insuredPerson2', field:'dob'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Программа страхования',
+						name: 'insuredPerson2.insProgramm',
+						data: 'lifeInsProgramm',
+						allowBlank:false,
+						width: 280,
+						// disabled: true,
+						column: 4
+					},{
+						xtype: 'checkbox',
+						fieldLabel: 'Доход документально подтвержден',
+						name: 'insuredPerson2.incomeVerificated',
+						width: 280,
+						// disabled: true,
+						//boxLabel : '',
+						column: 4/*,
+						influence: [
+							{value: false, type:'filter', check:{operation:'!='}, namespace: 'titulInsurance', field:'kUnder'}
+						]*/
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Официальный доход (в месяц)',
+						allowDecimals: true,
+						name: 'insuredPerson2.officialIncome',
+						value: 0,
+						width: 280,
+						// disabled: true,
+						column: 4
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Профессиональная деятельность',
+						name: 'insuredPerson2.profession.type',
+						data: 'profession',
+						allowBlank: false,
+						width: 280,
+						// disabled: true,
+						column: 4,
+						influence: [
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson2.profession.name'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.profession.name'},
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson2.profession.kUnder'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.profession.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: '',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson2.profession.name',
+						width: 280,
+						column: 4
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson2.profession.kUnder',
+						value: 0,
+						width: 280,
+						hidden: true,
+						minValue: 0.01,
+						column: 4
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Хобби',
+						name: 'insuredPerson2.hobby.type',
+						data: 'hobby',
+						allowBlank:false,
+						width: 280,
+						// disabled: true,
+						column: 4,
+						influence: [
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson2.hobby.name'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.hobby.name'},
+							{value: "other", type:'hide', check: {operation:'!='}, namespace: 'lifeInsurance', field:'insuredPerson2.hobby.kUnder'},
+							{value: "other", type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.hobby.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: '',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson2.hobby.name',
+						width: 280,
+						column: 4
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson2.hobby.kUnder',
+						value: 0,
+						width: 280,
+						hidden: true,
+						minValue: 0.01,
+						column: 4
+					},{
+						xtype: 'checkbox',
+						fieldLabel: '',
+						name: 'insuredPerson2.disease.exists',
+						width: 200,
+						// disabled: true,
+						boxLabel : 'Страдает заболеваниями:',
+						column: 5,
+						influence: [
+							{value: false, type:'hide', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.disease.name'},
+							{value: true, type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.disease.name'},
+							{value: false, type:'hide', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.disease.kUnder'},
+							{value: true, type:'show', check: {operation:'='}, namespace: 'lifeInsurance', field:'insuredPerson2.disease.kUnder'}
+						]
+					},{
+						xtype: 'textfield',
+						// fieldLabel: 'названия',
+						//vtype: 'charsRUSpace',
+						allowBlank: false,
+						hidden: true,
+						name: 'insuredPerson2.disease.name',
+						width: 200,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson2.disease.kUnder',
+						value: 0,
+						width: 200,
+						hidden: true,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Вес',
+						allowDecimals: true,
+						name: 'insuredPerson2.weight',
+						allowBlank:false,
+						width: 200,
+						// disabled: true,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Рост',
+						allowDecimals: false,
+						name: 'insuredPerson2.height',
+						allowBlank:false,
+						width: 200,
+						// disabled: true,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Коэффициент массы',
+						disabled: true,
+						allowDecimals: true,
+						name: 'insuredPerson2.kWeight',
+						width: 200,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						name: 'insuredPerson2.kUnderWeight',
+						value: 1,
+						hidden: true,
+						width: 200,
+						minValue: 0.01,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Страховая сумма',
+						name: 'insuredPerson2.ssCombo',
+						data: 'lifeInsSs',
+						allowBlank: false,
+						width: 200,
+						// disabled: true,
+						clearFilterOnReset: false,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая сумма, рублей',
+						allowDecimals: true,
+						allowBlank: false,
+						zeroClear: true,
+						name: 'insuredPerson2.ss',
+						value: 0,
+						disabled: true,
+						width: 200,
+						column: 5
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая премия, рублей',
+						allowDecimals: true,
+						name: 'insuredPerson2.sp',
+						value: 0,
+						width: 200,
+						disabled: true,
+						column: 5
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'titulInsurance',
+				title: '3. Страхование титула',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width: 1,   labelAlign: 'right', labelWidth: 420},
+					{width: 0.6, labelAlign: 'right', labelWidth: 420, view: ["titul"]},
+					{width: 0.4, labelAlign: 'right', labelWidth: 200, view: ["titul"]}
+				],
+				place:'main',
+				group:'titulInsurance',
+				namespace:'titulInsurance',
+				fields:[
+					{
+						fieldLabel: '<b>Страхование риска утраты и ограничения собственности</b>',
+						xtype: 'checkbox',
+						name: 'exists',
+						width: 150,
+						boxLabel : ' ',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В течение последних 12 месяцев правоустанавливающим документом на объект страхования являлось свидетельство о праве на наследство по закону или по завещанию, решение (определение) суда',
+						name: 'rightByCourtDecision',
+						data: 'yesNoBool',
+						value: false,
+						allowBlank:false,
+						width: 150,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'В числе собственников приобретаемого объекта недвижимости имеются несовершеннолетние или недееспособные лица',
+						name: 'incompetentOwner',
+						data: 'yesNoBool',
+						value: false,
+						allowBlank: false,
+						width: 150,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Сделка совершается по доверенности',
+						name: 'dealByWarrant',
+						data: 'yesNoBool',
+						value: false,
+						allowBlank: false,
+						width: 150,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'В течение последних 12 месяцев заключалось',
+						name: 'dealsCountLastYear',
+						data: 'dealsCountLastYear',
+						allowBlank: false,
+						anchor: '100%',
+						column: 2,
+						influence:[
+							{value: 0, type:'hide', check: {operation:'='}, namespace: 'titulInsurance', field:'kUnder'},
+							{value: 1, type:'show', check: {operation:'='}, namespace: 'titulInsurance', field:'kUnder'},
+							{value: 2, type:'show', check: {operation:'='}, namespace: 'titulInsurance', field:'kUnder'}
+							// Сделано перечисление, а не так как ниже, чтобы при пустом значении коэф. андеррайтера не появлялся.
+							// {value: 0, type:'show', check: {operation:'!='}, namespace: 'titulInsurance', field:'kUnder'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'К андер.',
+						allowDecimals: true,
+						hidden: true,
+						name: 'kUnder',
+						value: 0,
+						anchor: '100%',
+						minValue: 0.01,
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Количество сделок',
+						name: 'dealsCount',
+						data: 'dealsCount',
+						allowBlank:false,
+						anchor: '100%',
+						column: 2
+					},{
+						fieldLabel: '',
+						xtype: 'checkbox',
+						name: 'toFullSs',
+						anchor:'100%',
+						boxLabel : 'Страховая сумма до полной стоимости',
+						column: 2,
+						influence:[
+							{value: true, type:'disable', check: {operation:'='}, namespace: 'titulInsurance', field:'ss'},
+							{value: false, type:'enable', check: {operation:'='}, namespace: 'titulInsurance', field:'ss'}
+						]
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая сумма',
+						allowDecimals: true,
+						allowBlank: false,
+						zeroClear: true,
+						name: 'ss',
+						value: 0,
+						anchor: '100%',
+						column: 2
+					},{
+						xtype: 'Resolute.ui.form.numberField1',
+						fieldLabel: 'Страховая премия',
+						allowDecimals: true,
+						name: 'sp',
+						value: 0,
+						disabled: true,
+						anchor: '100%',
+						column: 2
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'specialConditions',
+				title: 'Дополнительные условия и приложения',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width: 1, labelAlign: 'right', labelWidth: 500}
+				],
+				place:'main',
+				group:'specialConditions',
+				namespace:'contractData',
+				fields:[
+					{
+						xtype: 'textfield',
+						fieldLabel: 'Особые условия',
+						name: 'specialConditions',
+						allowBlank: true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Неотъемлемой частью настоящего полиса являются:',
+						name: 'additionDocumentsStr',
+						allowBlank: true,
+						anchor:'100%',
+						column: 0
+					},{
+						fieldLabel: 'Заявление на страхование имущества и гражданской ответственности',
+						xtype: 'checkbox',
+						name: 'liabDeclaration',
+						anchor:'100%',
+						boxLabel : ' ',
+						column: 0
+					},{
+						fieldLabel: 'Заявление на страхование жизни и трудоспособности',
+						xtype: 'checkbox',
+						name: 'lifeDeclaration',
+						anchor:'100%',
+						boxLabel : ' ',
+						column: 0
+					},{
+						fieldLabel: 'Заявление на страхование титула',
+						xtype: 'checkbox',
+						name: 'titulDeclaration',
+						anchor:'100%',
+						boxLabel : ' ',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:true,
+						disabled:true,
+						fieldLabel:'Дата заявления',
+						name: 'dateDeclaration',
+						width: 150,
+						column: 0
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'autoProlongation',
+				title: 'Условия автоматического перезаключения',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width: 1, labelAlign: 'right', labelWidth: 400}
+				],
+				place:'main',
+				group:'autoProlongation',
+				namespace:'',
+				fields:[
+					{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Страхование имущества и гражданской ответственности до',
+						name: 'property.autoProlongation.toDate',
+						width: 150,
+						minValue: "today",
+						disabled: true,
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Страхование жизни и трудоспособности застрахованного 1 до',
+						name: 'lifeInsurance.insuredPerson1.autoProlongation.toDate',
+						width: 150,
+						minValue: "today",
+						disabled: true,
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Страхование жизни и трудоспособности застрахованного 2 до',
+						name: 'lifeInsurance.insuredPerson2.autoProlongation.toDate',
+						width: 150,
+						minValue: "today",
+						disabled: true,
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						fieldLabel: 'Страхование титула до',
+						name: 'titulInsurance.autoProlongation.toDate',
+						width: 150,
+						minValue: "today",
+						disabled: true,
+						column: 0
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: 'Сведения о страхователе',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 150},
+					{width:1,labelAlign:'right',labelWidth: 170},
+				
+					{width:0.3,labelAlign:'right',labelWidth: 170},
+					{width:0.1,labelAlign:'right',labelWidth: 1},
+					{width:0.15,labelAlign:'right',labelWidth: 1},
+					{width:0.45,labelAlign:'right',labelWidth: 1}
+				],
+				place:'main',
+				group:'policyHolder',
+				namespace:'policyHolder',
+				fields:[
+					{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Пол',
+						name: 'sex',
+						allowBlank: true,
+						column: 0,
+						data: "sex",
+						anchor:'100%'
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'dob',
+						width: 150,
+						maxValue: '18 лет назад',
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.phoneField',
+						fieldLabel:'Номер телефона моб.',
+						name: 'phone',
+						codeLength:3,
+						allowBlank:false,
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.phoneField',
+						fieldLabel:'Номер телефона дом.',
+						name: 'phoneHome',
+						codeLength:3,
+						allowBlank: true,
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						emptyText: 'Адрес электронной почты',
+						fieldLabel:'E-mail',
+						allowBlank:false,
+						maxLength: 120,
+						name: 'email',
+						vtype: 'email',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'displayfield',
+						column: 2,
+						value:' ' 
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Паспорт',
+						name: 'passport.seria',
+						allowBlank:false,
+						emptyText: 'Серия',
+						anchor:'100%',
+						column:3
+					},{
+						xtype: 'textfield',
+						name: 'passport.number',
+						allowBlank:false,
+						emptyText: 'Номер',
+						anchor:'100%',
+						column:4
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						emptyText: 'Дата выдачи',
+						maxValue  : "now",
+						maxText : 'Дата выдачи паспорта не может быть позже текущей даты.',
+						column:5,
+						anchor:'100%',
+						allowBlank:false,
+						name: 'passport.doi'
+					},{
+						xtype: 'textfield',
+						column:6,
+						anchor:'100%',
+						emptyText: 'Кем выдан',
+						allowBlank:false,
+						name: 'passport.issued'
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: 'Сведения о застрахованном 1',
+				view: ["lifeIns1"],
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 150},
+					{width:1,labelAlign:'right',labelWidth: 170},
+				
+					{width:0.3,labelAlign:'right',labelWidth: 170},
+					{width:0.1,labelAlign:'right',labelWidth: 1},
+					{width:0.15,labelAlign:'right',labelWidth: 1},
+					{width:0.45,labelAlign:'right',labelWidth: 1}
+				],
+				place:'main',
+				group:'insuredPerson1',
+				code: "insuredPerson1Info",
+				view: ["lifeIns1"],
+				namespace:'lifeInsurance.insuredPerson1',
+				fields:[
+					{
+						fieldLabel: '<b>Застрахованный 1</b>',
+						xtype: 'checkbox',
+						name: 'isPolicyHolder',
+						anchor:'100%',
+						boxLabel : 'Является страхователем',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'dob',
+						width: 150,
+						disabled: true,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Пол',
+						name: 'sex',
+						allowBlank: true,
+						column: 0,
+						data: "sex",
+						anchor:'100%'
+					},{
+						xtype: 'displayfield',
+						column: 2,
+						value:' ' 
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Паспорт',
+						name: 'passport.seria',
+						allowBlank:false,
+						emptyText: 'Серия',
+						anchor:'100%',
+						column:3
+					},{
+						xtype: 'textfield',
+						name: 'passport.number',
+						allowBlank:false,
+						emptyText: 'Номер',
+						anchor:'100%',
+						column:4
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						emptyText: 'Дата выдачи',
+						maxValue  : "now",
+						maxText : 'Дата выдачи паспорта не может быть позже текущей даты.',
+						column:5,
+						anchor:'100%',
+						allowBlank:false,
+						name: 'passport.doi'
+					},{
+						xtype: 'textfield',
+						column:6,
+						anchor:'100%',
+						emptyText: 'Кем выдан',
+						allowBlank:false,
+						name: 'passport.issued'
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: 'Сведения о застрахованном 2',
+				view: ["lifeIns2"],
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 150},
+					{width:1,labelAlign:'right',labelWidth: 170},
+				
+					{width:0.3,labelAlign:'right',labelWidth: 170},
+					{width:0.1,labelAlign:'right',labelWidth: 1},
+					{width:0.15,labelAlign:'right',labelWidth: 1},
+					{width:0.45,labelAlign:'right',labelWidth: 1}
+				],
+				place:'main',
+				group:'insuredPerson2',
+				code: "insuredPerson2Info",
+				view: ["lifeIns2"],
+				namespace:'lifeInsurance.insuredPerson2',
+				fields:[
+					{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'dob',
+						width: 150,
+						disabled: true,
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Пол',
+						name: 'sex',
+						allowBlank: true,
+						column: 0,
+						data: "sex",
+						anchor:'100%'
+					},{
+						xtype: 'displayfield',
+						column: 2,
+						value:' ' 
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Паспорт',
+						name: 'passport.seria',
+						allowBlank:false,
+						emptyText: 'Серия',
+						anchor:'100%',
+						column:3
+					},{
+						xtype: 'textfield',
+						name: 'passport.number',
+						allowBlank:false,
+						emptyText: 'Номер',
+						anchor:'100%',
+						column:4
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						emptyText: 'Дата выдачи',
+						maxValue  : "now",
+						maxText : 'Дата выдачи паспорта не может быть позже текущей даты.',
+						column:5,
+						anchor:'100%',
+						allowBlank:false,
+						name: 'passport.doi'
+					},{
+						xtype: 'textfield',
+						column:6,
+						anchor:'100%',
+						emptyText: 'Кем выдан',
+						allowBlank:false,
+						name: 'passport.issued'
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: 'Сведения о выгодоприобретателе 1',
+				view: ["lifeIns1"],
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 150},
+					{width:1,labelAlign:'right',labelWidth: 170},
+				
+					{width:0.3,labelAlign:'right',labelWidth: 170},
+					{width:0.1,labelAlign:'right',labelWidth: 1},
+					{width:0.15,labelAlign:'right',labelWidth: 1},
+					{width:0.45,labelAlign:'right',labelWidth: 1}
+				],
+				place:'main',
+				group:'beneficiary1',
+				view: ["lifeIns1"],
+				namespace:'lifeInsurance.beneficiary1',
+				fields:[
+					{
+						fieldLabel: '<b>Выгодоприобретатель 1</b>',
+						xtype: 'checkbox',
+						name: 'isInsuredPerson2',
+						anchor:'100%',
+						boxLabel : 'Является застрахованным 2',
+						column: 0
+					},{
+						xtype: 'checkbox',
+						fieldLabel: '',
+						name: 'legatees',
+						boxLabel: 'Наследники',
+						column: 1,
+						allowBlank: true/*,
+						influence:[
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'isInsuredPerson2', code: false},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'lastName', code: ""},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'firstName', code: ""},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'middleName', code: ""},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'lastName'},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'firstName'},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'middleName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'lastName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'firstName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'middleName'}
+						]*/
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'dob',
+						width: 150,
+						maxValue: 'now',
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Пол',
+						name: 'sex',
+						allowBlank: true,
+						column: 0,
+						data: "sex",
+						anchor:'100%'
+					},{
+						xtype: 'displayfield',
+						column: 2,
+						value:' ' 
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Паспорт',
+						name: 'passport.seria',
+						allowBlank:false,
+						emptyText: 'Серия',
+						anchor:'100%',
+						column:3
+					},{
+						xtype: 'textfield',
+						name: 'passport.number',
+						allowBlank:false,
+						emptyText: 'Номер',
+						anchor:'100%',
+						column:4
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						emptyText: 'Дата выдачи',
+						maxValue  : "now",
+						maxText : 'Дата выдачи паспорта не может быть позже текущей даты.',
+						column:5,
+						anchor:'100%',
+						allowBlank:false,
+						name: 'passport.doi'
+					},{
+						xtype: 'textfield',
+						column:6,
+						anchor:'100%',
+						emptyText: 'Кем выдан',
+						allowBlank:false,
+						name: 'passport.issued'
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				title: 'Сведения о выгодоприобретателе 2',
+				view: ["lifeIns2"],
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 150},
+					{width:1,labelAlign:'right',labelWidth: 170},
+				
+					{width:0.3,labelAlign:'right',labelWidth: 170},
+					{width:0.1,labelAlign:'right',labelWidth: 1},
+					{width:0.15,labelAlign:'right',labelWidth: 1},
+					{width:0.45,labelAlign:'right',labelWidth: 1}
+				],
+				place:'main',
+				group:'beneficiary2',
+				view: ["lifeIns2"],
+				namespace:'lifeInsurance.beneficiary2',
+				fields:[
+					{
+						fieldLabel: '<b>Выгодоприобретатель 2</b>',
+						xtype: 'checkbox',
+						name: 'isInsuredPerson1',
+						anchor:'100%',
+						boxLabel : 'Является застрахованным 1',
+						column: 0
+					},{
+						xtype: 'checkbox',
+						fieldLabel: '',
+						name: 'legatees',
+						boxLabel: 'Наследники',
+						column: 1,
+						allowBlank: true/*,
+						influence:[
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'isInsuredPerson2', code: false},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'lastName', code: ""},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'firstName', code: ""},
+							{value: true,  type:'set', namespace: 'lifeInsurance.beneficiary1', field: 'middleName', code: ""},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'lastName'},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'firstName'},
+							{value: true,  type:'disable', namespace: 'lifeInsurance.beneficiary1', field: 'middleName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'lastName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'firstName'},
+							{value: false,  type:'enable', namespace: 'lifeInsurance.beneficiary1', field: 'middleName'}
+						]*/
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Фамилия',
+						name: 'lastName',
+						maxLength: 120,
+						postprocess:['capitalise'],
+						vtype: 'charsRUDefSpace',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Имя',
+						maxLength: 60,
+						name: 'firstName',
+						postprocess:['capitalise'],
+						vtype: 'charsRU',
+						allowBlank:false,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Отчество',
+						maxLength: 60,
+						postprocess:['capitalise'],
+						name: 'middleName',
+						vtype: 'charsRUSpace',
+						allowBlank:true,
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						allowBlank:false,
+						fieldLabel:'Дата рождения',
+						name: 'dob',
+						width: 150,
+						maxValue: 'now',
+						column: 1
+					},{
+						xtype: 'Resolute.ui.form.list',
+						fieldLabel: 'Пол',
+						name: 'sex',
+						allowBlank: true,
+						column: 0,
+						data: "sex",
+						anchor:'100%'
+					},{
+						xtype: 'displayfield',
+						column: 2,
+						value:' ' 
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Паспорт',
+						name: 'passport.seria',
+						allowBlank:false,
+						emptyText: 'Серия',
+						anchor:'100%',
+						column:3
+					},{
+						xtype: 'textfield',
+						name: 'passport.number',
+						allowBlank:false,
+						emptyText: 'Номер',
+						anchor:'100%',
+						column:4
+					},{
+						xtype: 'Resolute.ui.form.dateTimeField',
+						emptyText: 'Дата выдачи',
+						maxValue  : "now",
+						maxText : 'Дата выдачи паспорта не может быть позже текущей даты.',
+						column:5,
+						anchor:'100%',
+						allowBlank:false,
+						name: 'passport.doi'
+					},{
+						xtype: 'textfield',
+						column:6,
+						anchor:'100%',
+						emptyText: 'Кем выдан',
+						allowBlank:false,
+						name: 'passport.issued'
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'immovableAddress',
+				title: 'Адрес застрахованного имущества',
+				//view: ["property"],
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 110}
+					
+				],
+				group: 'immovableAddress',
+				place:'main',
+				//view: ["property"],
+				namespace:'property.immovable.address',
+				fields:[
+					{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Регион',
+						name: 'region',
+						data: 'subjectRFsmall',
+						allowBlank:false,
+						sortByField:"order",
+						anchor:'100%',
+						column: 0,
+						tpl: '<tpl for="."><div class="x-combo-list-item">{name}</div><tpl if="xindex == 3"><div class="divider"></div></tpl></tpl>',
+						influence:[
+							{value:['42','59'],type:'notMandatory',check:{operation:'in'},namespace:'property.immovable.address',field:'city'},
+							{value:['42','59'],type:'mandatory',check:{operation:'notIn'},namespace:'property.immovable.address',field:'city'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Населенный пункт',
+						maxLength: 40,
+						name: 'city',
+						postprocess:['capitalise'],
+						vtype: 'charsRUdotSpace',
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Улица',
+						maxLength: 40,
+						postprocess:['capitalise'],
+						name: 'street',
+						vtype: 'charsRUdotSpace',
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Дом',
+						vtype:'digitsCharsRUSlash',
+						maxLength: 10,
+						name: 'house',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Корпус',
+						maxLength: 10,
+						vtype:'charsNoLat',
+						name: 'corp',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Строение',
+						maxLength: 10,
+						vtype:'charsNoLat',
+						name: 'building',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Квартира',
+						maxLength: 10,
+						vtype:'digitsCharsRUSlash',
+						name: 'flat',
+						anchor:'100%',
+						column: 1
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.separatorSection',
+				group: 'policyHolderAddress',
+				title: 'Адрес регистрации страхователя',
+				place:'main'
+			},{
+				xtype: 'Resolute.ui.form.section',
+				columns:[
+					{width:0.5,labelAlign:'right',labelWidth: 170},
+					{width:0.5,labelAlign:'right',labelWidth: 110}
+					
+				],
+				group: 'policyHolderAddress',
+				place:'main',
+				namespace:'policyHolder',
+				code: 'policyHolderAddress',
+				fields:[
+			     	{
+						fieldLabel: '<b>Адрес регистрации</b>',
+						xtype: 'checkbox',
+						name: 'addressIsTerritory',
+						anchor:'100%',
+						boxLabel : 'Совпадает с адресом имущества',
+						column: 0
+					},{
+						xtype: 'Resolute.ui.form.combobox',
+						fieldLabel: 'Регион',
+						name: 'region',
+						data: 'subjectRF',
+						allowBlank:false,
+						anchor:'100%',
+						sortByField:"order",
+						column: 0,
+						tpl: '<tpl for="."><div class="x-combo-list-item">{name}</div><tpl if="xindex == 3"><div class="divider"></div></tpl></tpl>',
+						influence:[
+							{value:['42','59'],type:'notMandatory',check:{operation:'in'},namespace:'policyHolder',field:'city'},
+							{value:['42','59'],type:'mandatory',check:{operation:'notIn'},namespace:'policyHolder',field:'city'}
+						]
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Населенный пункт',
+						maxLength: 40,
+						name: 'city',
+						postprocess:['capitalise'],
+						vtype: 'charsRUdotSpace',
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Улица',
+						maxLength: 40,
+						postprocess:['capitalise'],
+						name: 'street',
+						vtype: 'charsRUdotSpace',
+						anchor:'100%',
+						column: 0
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Дом',
+						vtype:'digitsCharsRUSlash',
+						maxLength: 10,
+						name: 'house',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Корпус',
+						maxLength: 10,
+						vtype:'charsNoLat',
+						name: 'corp',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Строение',
+						maxLength: 10,
+						vtype:'charsNoLat',
+						name: 'building',
+						anchor:'100%',
+						column: 1
+					},{
+						xtype: 'textfield',
+						fieldLabel: 'Квартира',
+						maxLength: 10,
+						vtype:'digitsCharsRUSlash',
+						name: 'flat',
+						anchor:'100%',
+						column: 1
+					}
+				]
+			},{
+				xtype: 'Resolute.ui.form.gridSection',
+				place:'main',
+				code: 'paymentList',
+				namespace: '',
+				data: [],
+				title:'График оплаты',
+				rowsField: 'payments.list',
+				metaform:{
+					title: 'Пункт графика оплаты',
+					viewType: 'tabs',
+					hideBlocks: false,
+					width: 600,
+					height: 290,
+					items:[
+						{
+							xtype: 'Resolute.ui.form.section',
+							columns: [
+								{width:1.0,labelAlign:'right'}
+							],
+							labelWidth: 180,
+							place:'main',
+							fields:[
+								{
+									xtype: 'Resolute.ui.form.dateTimeField',
+									allowBlank:false,
+									fieldLabel:'Срок уплаты страхового взноса',
+									helpText:'Срок уплаты страховой премии за период (не позднее указанной даты)',
+									name: 'dueDate',
+									width: 150,
+									column: 0
+								},{
+									xtype: 'Resolute.ui.form.currencyField',
+									fieldLabel: 'Сумма страхового взноса',
+									name: 'premium',
+									menuDisabled: true,
+									list: 'currency',
+									listItemField:'currency',
+									textWidth: 130,
+									anchor:'100%',
+									column:0
+								}
+							]
+						}
+					]
+				},
+				gridConfig:{
+					columns:[
+						{text:'Срок уплаты страхового взноса',field:'dueDate',renderer:'dateTimeShadeUTC',width:180},
+						{text:'Сумма страхового взноса',field:'premium.value',renderer:'moneyNoZero',width:270}
+					],
+					height: 170,
+					forceFit: true
+				},
+				actions:{
+					dblClick: false,
+					list:[]
+				}
+			}
+		]
+	},
+	logic:{},
+	converter:{},
+	registers:[]
+}
